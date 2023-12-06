@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Static HTTP Server</title>
+</head>
+
+<body>
+    <div id="container">
+        <p id="top-bar">
+            Static HTTP server
+            </a>
+        </p>
+
+        <a  target="_blank" href="https://www.github.com/saivarshith2000/HTTPStaticServer">
+            Github repository
+		</a><br>
+        <a  target="_blank" href="https://www.reddit.com/r/C_Programming/comments/goh2mu/simple_multithreaded_static_http_server_written/">
+            View discussion on reddit
+        </a>
+
+        <div id="section">
+            <p id="section-header">Why ?</p>
+            <p>Computer Networks is one of the courses this semester. But, due to the COVID-19 pandemic, it was cut
+                short
+                and some of the stuff we were supposed to learn was not covered. So, I thought "may be I'll learn it
+                online
+                and see what I can do". This server is result of that thought.
+            </p>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Features</p>
+            <ol>
+                <li>Static HTTP GET</li>
+                <li>Multithreading</li>
+                <li>Nothing else</li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Running</p>
+            <ol>
+                <li>You'll need a POSIX compliant system, <code>gcc</code> and <code>make</code>(optional).</li>
+                <li><code>clone</code> this repository and run <code>make</code>.</li>
+                <li>If you don't have <code>make</code> run <code>gcc -Wall server.c -o server</code> in root directory.
+                </li>
+                <li>Place your static content in the <code>html/</code> directory or pass your directory name as an
+                    argument. In anycase, the static directory must be
+                    in the same directory as the <code>server</code> binary.</li>
+                <li>Execute the server binary. When you want to stop, type <code>exit</code></li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">How does it work ?</p>
+            <ol>
+                <li>The <code>main()</code> sets up a listening socket, a threadpool with 8 worker threads (default) and
+                    waits for incoming connections using epoll().</li>
+                <li>When a new connection arrives, it puts the client socket file descriptor in a queue and sends a
+                    signal to the threadpool
+                    using the <code>pthread_cond_wait()</code> method and forgets about it.</li>
+                <li>A free thread from the threadpool dequeues this connection. If no thread is free, then it will sit
+                    in the queue until some thread comes for it.</li>
+                <li>The worker thread receives the HTTP request from client and returns the appropriate HTTP response
+                    and closes the connection.</li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Benchmarks</p>
+            <p>I included a html page full of images of puppies and a script to make a 100 requests to the server and
+                time it. On my laptop with an i5 processor and 8 GB RAM, each request takes around a second to complete. To run the benchmark yourself, in the
+                root directory of this repository run <code>bash benchmark.sh</code>.
+            </p>
+			<p class="snippet">
+            $ bash benchmark.sh<br>
+			Benchmark url: http://localhost:8000//benchmark/puppies/index.html<br>
+			Made 100 requests<br>
+			Total time: 41 s<br>
+			Average time per request: 412 ms<br>
+			</p>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Usage</p>
+            <p class="snippet">
+            $ ./server -h<br><br>
+                Static HTTP server<br>
+                Usage: ./server [-p port number] [-h html directory] [-t thread pool size]<br>
+
+                <br>[Optional arguments]<br>
+                &emsp;-p&emsp;Server port (Default 8000)<br>
+                &emsp;-t&emsp;Thread pool size. Number of threads for the server to use. (Default 8)<br>
+                &emsp;-s&emsp;HTML files in this directory are served. This directory must be in the same directory as
+                the server binary and don't add './' to the directory name! (Default 'html')<br>
+                &emsp;-h&emsp;Shows available arguments<br>
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>
