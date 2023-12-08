@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Static HTTP Server</title>
+</head>
+
+<body>
+    <div id="container">
+        <p id="top-bar">
+            Статический сервер
+            </a>
+        </p>
+
+        <a  target="_blank" href="https://github.com/kalashkovpaul/bmstu-cn-cw">
+            Github
+		</a>
+
+        <div id="section">
+            <p id="section-header">Зачем ?</p>
+            <p>Этот сервер - результат выполнения курсовой работы по курсу "Компьютерные сети" в 7 семестре обучения на ИУ7, МГТУ им. Н. Э. Баумана
+                <br/>
+                Студент: Калашков Павел, ИУ7-76Б
+                <br/>
+                Лектор: Тихомирова Елизавета Алексеевна
+                <br/>
+                2023 год
+            </p>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Фичи</p>
+            <ol>
+                <li>Поддержка запросов GET и HEAD (поддержка статусов 200, 403, 404).</li>
+                <li>Ответ на Неподдерживаемые запросы статусом 405.</li>
+                <li>Выставление content type в зависимости от типа файла (поддержка .html, .css, .js, .png, .jpg, .jpeg, .swf, .gif).</li>
+                <li>Корректная передача файлов размером в 100мб.</li>
+                <li>Сервер по умолчанию возвращает html-страницу на выбранную тему с css-стилем.</li>
+                <li>Учтены минимальные требования к безопасности статик-серверов (предусмотреть ошибку в случае если адрес будет выходить за root директорию сервера).</li>
+                <li>Реализован логгер.</li>
+                <li>Использован язык Си. Без сторонних библиотек.</li>
+                <li>Реализована архитектура thread pull, использован системный вызов pselect.</li>
+                <li>Сервер работает стабильно.</li>
+                <li>Проведено сравнение результатов нагрузочного тестирования (проведённого при помощи Apache Benchmarks) с nginx - см. РПЗ</li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Как запустить?</p>
+            <ol>
+                <li>Берём любую POSIX систему, поддерживающую <code>gcc</code> and <code>make</code>(опционально).</li>
+                <li>Клонируем репозиторий при помощи <code>git clone https://github.com/kalashkovpaul/bmstu-cn-cw.git</code>, переходим в папку src и выполняем <code>make</code>.</li>
+                </li>
+                <li>Помещаем статический контент в директорию <code>html/</code> или передаём путь к директории через аргумент. Так или иначе, статическая директория должна располагаться в той же папке, что и исполняемый файл <code>server</code>.</li>
+                <li>Запускаем исполняемый файл. При необходимости остановить сервер, используем <code>Ctrl + C</code></li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Запуск nginx</p>
+            <ol>
+                <li>Устанавливаем <code>docker</code>, после чего переходим в директорию <code>src</code> и создаём директорию <code>html</code>, наполненную статическим контентом.</li>
+                <li>Запускаем контейнер при помощи <code>docker compose up --build</code></li>
+                <li>Раздачу статики наблюдаем, например, на <code>http://localhost:8080/</code></li>
+            </ol>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Производительность</p>
+            <p>Тестировать производительность можно при помощи Apache Benchmarks, команда <code>ab -n 1000 -c 100 http://127.0.0.1:8000/index.html</code> для сервера на Си и <code>ab -n 1000 -c 100 http://127.0.0.1:8080</code> для nginx.
+            </p>
+            <p>Результаты для сервера на Си:</p>
+			<!-- <iframe src="c.html" title="description" width="1000px"></iframe> -->
+            <p class="snippet">
+This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        Single
+Server Hostname:        127.0.0.1
+Server Port:            8000
+
+Document Path:          /index.html
+Document Length:        6178 bytes
+
+Concurrency Level:      100
+Time taken for tests:   0.301 seconds
+Complete requests:      1000
+Failed requests:        0
+Total transferred:      6285000 bytes
+HTML transferred:       6178000 bytes
+Requests per second:    3321.94 [#/sec] (mean)
+Time per request:       30.103 [ms] (mean)
+Time per request:       0.301 [ms] (mean, across all concurrent requests)
+Transfer rate:          20389.05 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    1   1.0      0       7
+Processing:     2   28  10.4     25      90
+Waiting:        0   27  10.2     24      90
+Total:          7   29  10.2     25      91
+
+Percentage of the requests served within a certain time (ms)
+  50%     25
+  66%     33
+  75%     36
+  80%     40
+  90%     44
+  95%     47
+  98%     48
+  99%     50
+ 100%     91 (longest request)
+            </p>
+            <p> Результаты для сервера nginx:</p>
+            <p class="snippet">
+This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        nginx
+Server Hostname:        127.0.0.1
+Server Port:            8080
+
+Document Path:          /index.html
+Document Length:        6354 bytes
+
+Concurrency Level:      100
+Time taken for tests:   0.698 seconds
+Complete requests:      1000
+Failed requests:        0
+Total transferred:      6582000 bytes
+HTML transferred:       6354000 bytes
+Requests per second:    1431.71 [#/sec] (mean)
+Time per request:       69.847 [ms] (mean)
+Time per request:       0.698 [ms] (mean, across all concurrent requests)
+Transfer rate:          9202.66 [Kbytes/sec] received
+
+Connection Times (ms)
+                min  mean[+/-sd] median   max
+Connect:        0    2   2.1      1       9
+Processing:    13   63  22.0     59     146
+Waiting:       13   60  21.5     56     146
+Total:         15   65  21.5     62     146
+
+Percentage of the requests served within a certain time (ms)
+    50%     62
+    66%     73
+    75%     79
+    80%     85
+    90%     96
+    95%    103
+    98%    110
+    99%    121
+    100%    146 (longest request)
+            </p>
+        </div>
+
+        <div id="section">
+            <p id="section-header">Использование:</p>
+            <p class="snippet-1">
+            $ ./server -h<br><br>
+                Static HTTP server<br>
+                Usage: ./server [-p port number] [-h html directory] [-t thread pool size]<br>
+
+                <br>[Optional arguments]<br>
+                &emsp;-p&emsp;Server port (Default 8000)<br>
+                &emsp;-t&emsp;Thread pool size. Number of threads for the server to use. (Default 8)<br>
+                &emsp;-s&emsp;HTML files in this directory are served. This directory must be in the same directory as
+                the server binary and don't add './' to the directory name! (Default 'html')<br>
+                &emsp;-h&emsp;Shows available arguments<br>
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

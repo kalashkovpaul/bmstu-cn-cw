@@ -1,0 +1,466 @@
+\section{\large Технологическая часть}
+
+В  данном  разделе  рассмотрены  средства  разработки  программного
+обеспечения, приведены детали реализации и листинги исходных кодов.
+
+Приведённые листинги исходных кодов включают в себя создание таблиц и ограничений, создание ролевой модели и функции управления доступами (на основе приведённой выше Use-Case диаграммы), реализацию сервера (менеджер соединений, класс соединений).
+
+\subsection{Средства реализации}
+Как  основное  средство  реализации  и  разработки  ПО  был  выбран  язык
+программирования  TypeScript \cite{ts}.
+Причиной  выбора  данного  языка  является  тот факт,  что  он  имеет компилируется в JavaScript \cite{js}, что делает его также кроссплатформенным и позволяет использовать библиотеки, написанные для JavaScript. 
+Наличие типизации позволяет траспилятору получать более эффективный код, чем для JavaScript, вследствие чего производительность TypeScript является предпочтительнее при написании сервера \cite{ts-vs-js}.
+
+Для запуска написанного сервера была использована библиотека Node.js \cite{nodejs} для языка JavaScript, которая предоставляет асинхронное окружение, что позволяет избавиться от синхронности и разрабатывать более производительные приложения.
+
+Для обработки HTTP запросов была использована библиотека Fastify \cite{fastify}, которая была выбрана из-за своего превосходства в скорости обработки соединений по сравнению с другими библиотеками (Koa, Express, Restify, Hapi) \cite{fastify-b}.
+Для доступа к СУБД, реализованной при помощи PostgreSQL~\cite{postgres}, была использована библиотека pg-promise~\cite{pg-promise}, предоставляющая интерфейс для взаимодействия с базой данных.
+
+Для реализации графического интерфейса API была использована библиотека FastAPI~\cite{fastapi}, позволяющая быстро создать рабочий интерфейс для созданного API (вместе с документацией).
+Средой разработки  послужил  графический  редактор  Visual  Studio  Code~\cite{vscode},  который известен  содержанием  большого  количество  плагинов,  ускоряющих  процесс разработки  программы.
+
+
+\subsubsection{Создание таблиц и ограничений}
+
+Результат переноса приведённых выше таблиц в скрипты создания пользовательских типов данных и страниц, написанных на SQL, можно увидеть на листингах~\ref{code:usertypes} -- \ref{code:createtables5}.
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Определение пользовательских типов данных}
+	\label{code:usertypes}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/usertypes.sql}
+\end{code}
+
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание таблиц (часть 1)}
+	\label{code:createtables1}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/createtables1.sql}
+\end{code}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание таблиц (часть 2)}
+	\label{code:createtables2}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/createtables2.sql}
+\end{code}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание таблиц (часть 3)}
+	\label{code:createtables3}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/createtables3.sql}
+\end{code}
+\end{figure}
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание таблиц (часть 4)}
+	\label{code:createtables4}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/createtables4.sql}
+\end{code}
+\end{figure}
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание таблиц (часть 5)}
+	\label{code:createtables5}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/createtables5.sql}
+\end{code}
+\end{figure}
+
+Также в созданные с применением перечисленных скриптов таблицы необходимо добавить ограничения.
+Это можно сделать при помощи скрипта, приведённого на листингах~\ref{code:constraints1} --~\ref{code:constraints3}.
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание ограничений для созданных таблиц (часть 1)}
+	\label{code:constraints1}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/constraints1.sql}
+\end{code}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание ограничений для созданных таблиц (часть 2)}
+	\label{code:constraints2}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/constraints2.sql}
+\end{code}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание ограничений для созданных таблиц (часть 3)}
+	\label{code:constraints3}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/constraints3.sql}
+\end{code}
+\end{figure}
+
+\subsubsection{Создание ролевой модели и управление доступами}
+
+На основе приведённой выше Use-Case диаграммы создадим роли и распределим доступы к таблицам.
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Создание ролей}
+	\label{code:roles1}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles1.sql}
+\end{code}
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Распределение доступов между ролями (часть 1)}
+	\label{code:roles2}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles2.sql}
+\end{code}
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Распределение доступов между ролями (часть 2)}
+	\label{code:roles3}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles3.sql}
+\end{code}
+\end{figure}
+
+Для управления доступами для конкретных соединений была использована технология политики RLS (\textit{англ.} Row Level Security Polices) и процедура, приведённая на листингах \ref{code:roles4} -- \ref{code:roles6}.
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Управление доступами при помощи RLS (часть 1)}
+	\label{code:roles4}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles4.sql}
+\end{code}
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Управление доступами при помощи RLS (часть 2)}
+	\label{code:roles5}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles5.sql}
+\end{code}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Управление доступами при помощи RLS (часть 3)}
+	\label{code:roles6}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{/Users/p.kalashkov/Desktop/sixthTerm/bmstu-db-cw/docs/code/roles6.sql}
+\end{code}
+\end{figure}
+
+
+\subsection{Реализация сервера}
+
+В  расположенных  ниже  листингах \ref{code:1-1} -- \ref{code:2-3} приведены реализации менеджера соединений и класса соединения, объекты которого используются в обработчиках запросов.
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Реализация менеджера соединений (часть 1)}
+	\label{code:1-1}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{code/ConnectManager1.ts}
+\end{code}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Реализация менеджера соединений (часть 2)}
+	\label{code:1-2}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{code/ConnectManager2.ts}
+\end{code}
+\end{figure}
+
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Реализация класса соединения (часть 1)}
+	\label{code:2-1}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{code/Connection1.ts}
+\end{code}
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Реализация класса соединения (часть 2)}
+	\label{code:2-2}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{code/Connection2.ts}
+\end{code}
+\end{figure}
+
+\begin{figure}[H]
+\begin{code}
+	\captionsetup{justification=centering}
+	\captionof{listing}{Реализация класса соединения (часть 3)}
+	\label{code:2-3}
+	\inputminted
+	[
+	frame=single,
+	framerule=0.5pt,
+	framesep=20pt,
+	fontsize=\small,
+	tabsize=4,
+	linenos,
+	numbersep=5pt,
+	xleftmargin=10pt,
+	]
+	{text}
+	{code/Connection2.ts}
+\end{code}
+\end{figure}
+
+\subsection*{Вывод}
+В данном разделе были рассмотрены средства реализации ПО, приведены
+листинги скриптов создания таблиц и ограничений, а также листинги исходного кода программы, разработанной на основе алгоритмов,  выбранных  в  аналитическом  разделе  и  соответствующих приведённой в конструкторской части диаграмме классов приложения.
+
+\pagebreak

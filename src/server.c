@@ -6,25 +6,22 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-// #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <pthread.h>
+#include "logger.h"
 
-/* Buffer sizes */
 #define REQUEST_BUFFER_SIZE 2048
 #define FILE_BUFFER_SIZE 1024
 #define FILE_NAME_SIZE 64
 
-/* Default server config */
 #define LISTEN_BACKLOG 32
-#define MAX_CONNECTIONS 64
+#define MAX_CONNECTIONS 100
 #define DEFAULT_PORT 8000
 #define DEFAULT_POOLSIZE 8
 #define DEFAULT_STATIC "html"
 
-/* Help string */
 #define HELPSTRING "\nStatic HTTP server\n"\
 	"Usage: %s [-p port number] [-h html directory] [-t thread pool size]\n"\
 	"\n[Optional arguments]\n"\
@@ -34,8 +31,6 @@
 	"\t\tas the server binary and don't add './' to the directory name! (Default 'html')\n"\
 	"\t-h\tShows available arguments\n"
 
-
-/* HTTP Response Headers */
 #define HTTP_BASE_OK "HTTP/1.1 200 OK\r\n"\
 	"Server: Single File Server\r\n"\
 	"Connection: Closed\r\n"\
@@ -49,29 +44,31 @@
 #define HTTP_405 "HTTP/1.1 405 Method Not Allowed\r\n"\
 	"Server: Single File Server\r\n"\
 	"Content-Type: text/html; charset=utf-8\r\n"\
-	"Connection: Closed\r\n\r\nONLY GET IS ACCEPTED"
+	"Connection: Closed\r\n\r\nONLY GET AND HEAD ARE ACCEPTED"
 
 #define HTTP_BASE_OK_len strlen(HTTP_BASE_OK)
 #define HTTP_404_len strlen(HTTP_404)
 #define HTTP_405_len strlen(HTTP_405)
 
 
-/* Supported filetypes */
 enum filetype {
 	HTML,
 	CSS,
+	JS,
 	JPG,
+	JPEG,
+	SWF,
+	GIF,
 	PNG,
 	TXT,
 	SVG,
 	UNKNOWN
 };
 
-/* HTTP request status */
 enum http_status {
 	OK,
 	INCOMPLETE,
-	NOTGET,
+	NOTALLOWED,
 	BADFILE,
 	NOTFOUND
 };
@@ -92,19 +89,17 @@ struct queue {
 };
 typedef struct queue queue;
 
-/* Global variables accessed by threads */
 char *html_dir;
 int html_dir_len = 0;
 queue *connqueue;
 unsigned int *bytes_read = NULL;
 unsigned int *bytes_wrote = NULL;
 fd_set client_fdset;
-int conn_amount = 0;
-int *client_sock_array;
 int threads = DEFAULT_POOLSIZE;
+int *client_sockfd = NULL;
+int time_to_stop = 0;
 
 
-/* Creates a queue of given capacity */
 queue *create_queue(int capacity)
 {
 	queue *q = malloc(sizeof(queue));
@@ -113,25 +108,25 @@ queue *create_queue(int capacity)
 	q->head = NULL;
 	q->tail = NULL;
 
-	// Synchronization variables
 	if (pthread_mutex_init(&(q->lock), NULL) != 0) {
 		perror("Error Initialising mutex lock\n");
 		free(q);
+		q = NULL;
 		return NULL;
 	}
 	if (pthread_cond_init(&(q->cond_var), NULL) != 0){
 		pthread_mutex_destroy(&(q->lock));
 		perror("Error Initialising conditional variable\n");
 		free(q);
+		q = NULL;
 		return NULL;
 	}
 	return q;
 }
 
-/* Enqueues a new connection */
 int enqueue(queue *q, int clientfd)
 {
-	printf("Queue size: %d, capacity: %d\n", q->size, q->capacity);
+	// printf("Queue size: %d, capacity: %d\n", q->size, q->capacity);
 	if(q->size == q->capacity) {
 		return -1;
 	}
@@ -149,9 +144,6 @@ int enqueue(queue *q, int clientfd)
 	return 1;
 }
 
-/* Dequeues a connection from the queue and returns pointer to the dequeued
- * node. Frees the qnode and returns its contents. If q is empty -1 is returned.
- */
 int dequeue(queue *q)
 {
 	if(q->size == 0)
@@ -168,12 +160,12 @@ int dequeue(queue *q)
 		qnode *oldhead = q->head;
 		q->head = oldhead->next;
 		free(oldhead);
+		oldhead = NULL;
 	}
 	q->size--;
 	return retval;
 }
 
-/* Deallocates the memory given to queue */
 void freequeue(queue *q)
 {
 	qnode *cursor = q->head, *temp;
@@ -190,9 +182,6 @@ void freequeue(queue *q)
 	return ;
 }
 
-/* Parses command line arguments and returns port, threads, html_dir via pointers
- * (only if they were passed in the first place)
- */
 int parse_args(int argc, char *argv[], int *port, int *threads, char **html_dir)
 {
 	int option;
@@ -218,7 +207,6 @@ int parse_args(int argc, char *argv[], int *port, int *threads, char **html_dir)
 	return 1;
 }
 
-/* Returns if ''html_dir' exists in the current directory */
 int check_html_dir()
 {
 	/* Make sure that root (/) or home (~) is not accessed. */
@@ -245,7 +233,6 @@ int check_html_dir()
 	return 0;
 }
 
-/* Creates a listen socket on supplied port */
 int create_listen_socket(int port)
 {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -253,7 +240,6 @@ int create_listen_socket(int port)
 		perror("Failed to create listen socket\n");
 		return -1;
 	}
-	/* Make socket reusable */
 	int enable = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
 		perror("setsockopt(SO_REUSEADDR) failed");
@@ -275,32 +261,20 @@ int create_listen_socket(int port)
 	return fd;
 }
 
-/* Returns 1 is the user entered exit or quit */
-int handle_stdin()
-{
-	char input[8];
-	fgets(input, 7, stdin);
-	input[7] = '\0';
-	if(strcmp(input, "exit\n") == 0 || strcmp(input, "quit\n") == 0)
-		return 1;
-	printf("Enter 'exit' or 'quit' (without quotes) to stop the server\n");
-	return 0;
-}
-
-/* The file name extracted from HTTP GET request and returned via the filename pointer.
- * 1 is returned on success and 0 otherwise
- */
 int get_file_name(char *request, char *filename)
 {
 	char method[8] = {'\0'}, version[8] = {'\0'};
 	sscanf(request, "%7s %s %7s\r\n", method, filename, version);
-	/* If method is GET, return NULL */
-	if (strcmp(method, "GET") != 0)
-		return 0;
-	return 1;
+	char *message_to_log = calloc(FILE_BUFFER_SIZE, sizeof(char));
+	snprintf(message_to_log, FILE_BUFFER_SIZE, "%s %s %s", method, filename, version);
+	add_to_log(message_to_log);
+	if (strcmp(method, "GET") == 0)
+		return 1;
+	if (strcmp(method, "HEAD") == 0)
+		return 2;
+	return 0;
 }
 
-/* Returns filetype based on file extension */
 enum filetype get_filetype(char *filename)
 {
 	/* Find the last '.' in filename */
@@ -320,10 +294,16 @@ enum filetype get_filetype(char *filename)
 		return HTML;
 	else if(strcmp(ext, "css") == 0)
 		return CSS;
+	else if (strcmp(ext, "js") == 0)
+		return JS;
 	else if(strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0)
 		return JPG;
 	else if(strcmp(ext, "png") == 0)
 		return PNG;
+	else if (strcmp(ext, "swf") == 0)
+		return SWF;
+	else if (strcmp(ext, "gif") == 0)
+		return GIF;
 	else if(strcmp(ext, "svg") == 0)
 		return SVG;
 	else if (strcmp(ext, "txt") == 0)
@@ -332,7 +312,6 @@ enum filetype get_filetype(char *filename)
 		return UNKNOWN;
 }
 
-/* Creates the HTTP response HEADER based on file extension */
 char *get_response_header(char *filename)
 {
 	enum filetype ft = get_filetype(filename);
@@ -343,6 +322,15 @@ char *get_response_header(char *filename)
 			break;
 		case CSS:
 			sprintf(response_header, "%stext/css; charset=utf-8\r\n\r\n", HTTP_BASE_OK);
+			break;
+		case JS:
+			sprintf(response_header, "%stext/javascript; charset=utf-8\r\n\r\n", HTTP_BASE_OK);
+			break;
+		case SWF:
+			sprintf(response_header, "%sapplication/x-shockwave-flash; charset=utf-8\r\n\r\n", HTTP_BASE_OK);
+			break;
+		case GIF:
+			sprintf(response_header, "%simage/gif; charset=utf-8\r\n\r\n", HTTP_BASE_OK);
 			break;
 		case TXT:
 			sprintf(response_header, "%stext/plain; charset=utf-8\r\n\r\n", HTTP_BASE_OK);
@@ -363,10 +351,6 @@ char *get_response_header(char *filename)
 	return response_header;
 }
 
-/* This function handles a http request and returns the enum indicating request status.
- * If the request is valid, it returns the file descriptor of the html file via htmlfd pointer
- * It also returns the response header via the response_header pointer.
- */
 enum http_status handle_http_request(char *request, int *htmlfd, char **response_header)
 {
 	char filename[FILE_NAME_SIZE] = {'\0'};
@@ -374,25 +358,20 @@ enum http_status handle_http_request(char *request, int *htmlfd, char **response
 	memset(fullpath, 0, FILE_NAME_SIZE + html_dir_len + 4);
 	int fd = -1;
 
-	/* Intial values for return pointers */
 	*htmlfd = -1;
 	*response_header = NULL;
 
-	/* Check that the entire request is read */
 	if (strstr(request, "\r\n\r\n") == NULL)
 		return INCOMPLETE;
 
-	/* Extract filename */
-	if(get_file_name(request, filename) == 0){
-		/* get_file_name() returns 0 if method is not GET */
-		return NOTGET;
+	int method = get_file_name(request, filename);
+	if(method == 0){
+		return NOTALLOWED;
 	}
 	if (filename[0] == '.' || filename[0] == '~' || strstr(filename, "..") != NULL) {
-		/* If the filename starts with any of the above chars, its a malicious request */
 		return BADFILE;
 	}
 
-	/* If the filename is "/" set it to "index.html" */
 	if(strcmp(filename, "/") == 0)
 		sprintf(filename, "/index.html");
 
@@ -409,54 +388,32 @@ enum http_status handle_http_request(char *request, int *htmlfd, char **response
 void close_clientfd(int clientfd, int index, int total)
 {
 	bytes_wrote[index] += total;
-	printf("clientfd: %d\n", clientfd);
 	close(clientfd);
-	// FD_CLR(clientfd, &client_fdset);
-	// for (int i = 0; i < threads; i++)
-	// {
-	// 	// printf("i = %d, socket: %d\n", i, client_sock_array[i]);
-	// 	if (client_sock_array[i] == clientfd)
-	// 	{
-	// 		client_sock_array[i] = 0;
-	// 	}
-	// }
-	conn_amount--;
 }
 
-
-/* Thread function that handles a single client in a blocking fashion. This function takes no arguments.
- * The connection queue pointer is global and mutex locks and condition variables are global.
- */
 void* handle_connection(void *args)
 {
-	/* thread receives its index as an argument */
 	int tindex = *((int*)args);
 	while(1) {
-		/* File descriptors */
-		int clientfd = -1;        // holds the client socket descriptor
-		int htmlfd = -1;          // holds the html file descriptor
+		int clientfd = -1;
+		int htmlfd = -1;
 
-		/* indicates the status of the http request */
 		enum http_status req_status;
-		int br,bw;                // stores bytes read and bytes wrote for each read() and write()
-		int total_wrote = 0;      // bytes read and wrote for entire transfer per client
+		int br,bw;
+		int total_wrote = 0;
 
-		/* Char buffers */
 		char *response_header;
 		char filebuffer[FILE_BUFFER_SIZE] = {'\0'};
 		char req_buffer[REQUEST_BUFFER_SIZE] = {'\0'};
 
-		/* Dequeue a connection */
 		pthread_mutex_lock(&(connqueue->lock));
-		pthread_cond_wait(&(connqueue->cond_var), &(connqueue->lock));
+		// pthread_cond_wait(&(connqueue->cond_var), &(connqueue->lock));
 		clientfd = dequeue(connqueue);
 		pthread_mutex_unlock(&(connqueue->lock));
 
-		/* Verify that dequeue was successful */
 		if(clientfd == -1)
 			continue;
 
-		/* read request and check if it failed */
 		br = read(clientfd, req_buffer, REQUEST_BUFFER_SIZE-1);
 		if(br <= 0)
 		{
@@ -466,7 +423,6 @@ void* handle_connection(void *args)
 		req_buffer[br] = '\0';
 		bytes_read[tindex] += br;
 
-		/* Handle http request */
 		req_status = handle_http_request(req_buffer, &htmlfd, &response_header);
 		switch(req_status){
 			case INCOMPLETE:
@@ -475,7 +431,7 @@ void* handle_connection(void *args)
 					close_clientfd(clientfd, tindex, total_wrote);
 					continue;
 				}
-			case NOTGET:
+			case NOTALLOWED:
 				{
 					bw = write(clientfd, HTTP_405, HTTP_405_len);
 					if(bw > 0)
@@ -494,6 +450,8 @@ void* handle_connection(void *args)
 			case OK:
 				{
 					bw = write(clientfd, response_header, strlen(response_header));
+					char filename[FILE_NAME_SIZE] = {'\0'};
+					int method = get_file_name(req_buffer, filename);
 					if(bw <= 0)
 					{
 						close_clientfd(clientfd, tindex, total_wrote);
@@ -501,7 +459,7 @@ void* handle_connection(void *args)
 					}
 					total_wrote += bw;
 					int flag = 0;
-					while((br = read(htmlfd, filebuffer, FILE_BUFFER_SIZE-1))) {
+					while(method != 2 && (br = read(htmlfd, filebuffer, FILE_BUFFER_SIZE-1))) {
 						filebuffer[br] = '\0';
 						bw = write(clientfd, filebuffer, br);
 						if(bw <= 0)
@@ -523,9 +481,6 @@ void* handle_connection(void *args)
 	return NULL;
 }
 
-/* Creates 'poolsize' number of threads and returns a pointer to pthread_t array. If
- * any error occurs, message is printed and NULL is returned
- */
 pthread_t* create_threadpool(int poolsize, void *thread_func)
 {
 	pthread_t *workers = calloc(poolsize, sizeof(pthread_t));
@@ -543,57 +498,33 @@ pthread_t* create_threadpool(int poolsize, void *thread_func)
 	return workers;
 }
 
+void stop_server(int signum)
+{
+	time_to_stop = 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int port = DEFAULT_PORT;
 	html_dir = DEFAULT_STATIC;
 
-	/* Parse arguments */
 	if(parse_args(argc, argv, &port, &threads, &html_dir) == -1)
 		return EXIT_SUCCESS;
 
-	/* check static directory */
 	if(!check_html_dir())
 		exit(EXIT_FAILURE);
 	html_dir_len = strlen(html_dir);
 
-	/* open listen socket */
+	client_sockfd = calloc(threads, sizeof(int));
 	int listenfd;
 	if((listenfd = create_listen_socket(port)) < 0)
 		exit(EXIT_FAILURE);
 
-	// /* Epoll */
-	// int epollfd = epoll_create1(0);
-	// if(epollfd < 0) {
-	// 	perror("error in epoll_create1()\n");
-	// 	close(listenfd);
-	// 	exit(EXIT_FAILURE);
-	// }
-	// struct epoll_event stdin_event, listen_event;
-	// stdin_event.events = EPOLLIN;
-	// stdin_event.data.fd = STDIN_FILENO;
-	// if(epoll_ctl(epollfd, EPOLL_CTL_ADD, STDIN_FILENO, &stdin_event) < 0) {
-	// 	perror("error in epoll_ctl() for stdin_event\n");
-	// 	close(listenfd);
-	// 	close(epollfd);
-	// 	exit(EXIT_FAILURE);
-	// }
-	// listen_event.events = EPOLLIN;
-	// listen_event.data.fd = listenfd;
-	// if(epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &listen_event) < 0) {
-	// 	perror("error in epoll_ctl() for listen_event\n");
-	// 	close(listenfd);
-	// 	close(epollfd);
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	/* Create connection queue */
 	if((connqueue = create_queue(MAX_CONNECTIONS)) == NULL){
 		close(listenfd);
 		exit(EXIT_FAILURE);
 	}
 
-	/* initiate thread pool */
 	pthread_t *workers;
 	if((workers = create_threadpool(threads, handle_connection)) == NULL) {
 		close(listenfd);
@@ -601,77 +532,42 @@ int main(int argc, char *argv[])
 		pthread_cond_destroy(&(connqueue->cond_var));
 		exit(EXIT_FAILURE);
 	}
+	create_logger();
 
-	/* allocate counter arrays */
 	bytes_read = calloc(threads, sizeof(unsigned int));
 	bytes_wrote = calloc(threads, sizeof(unsigned int));
 
-	/* Print server configuration */
-	printf("Server running on port: %d\nthreads: %d\nstatic directory: %s\nType exit or quit to exit\n", port, threads, html_dir);
+	printf("Server running on port: %d\nthreads: %d\nstatic directory: %s\nType Ctrl + C to exit\n", port, threads, html_dir);
 
-	/* ignore broken pipe */
 	signal(SIGPIPE, SIG_IGN);
+	signal(SIGINT, stop_server);
 
-	/* Start server loop */
 	int clientfd = -1;
 	struct sockaddr_in client_addr;
 	socklen_t len;
-	// struct epoll_event events[2];
 	int i;
-	struct timeval tv;
-	int client_sockfd[threads];
-	client_sock_array = client_sockfd;
+	struct timespec tv;
 	bzero((void*)client_sockfd, sizeof(client_sockfd));
 	int ret = 0;
-	int maxsock = listenfd;
-	printf("listenfd: %d\n", listenfd);
 	while (1)
 	{
 		FD_ZERO(&client_fdset);
 		FD_SET(listenfd, &client_fdset);
 		tv.tv_sec = 30;
-		tv.tv_usec = 0;
+		tv.tv_nsec = 0;
 
-		for (i = 0; i < threads; i++)
-		{
-			if (client_sockfd[i] != 0)
-			{
-				FD_SET(client_sockfd[i], &client_fdset);
-			}
-		}
-
-		ret = select(maxsock+1, &client_fdset, NULL, NULL, &tv);
+		ret = pselect(listenfd+1, &client_fdset, NULL, NULL, &tv, NULL);
 		if(ret < 0) {
 			printf("select error: %s\n", strerror(errno));
-			break;
+			// break;
 		}
 		else if(ret == 0) {
-			printf("timeout\n");
-			continue;
-		}
-
-		for (i = 0; i < conn_amount; i++)
-		{
-			if (FD_ISSET(client_sockfd[i], &client_fdset))
-			{
-				// printf("Socket %d is ready\n", client_sockfd[i]);
-				pthread_mutex_lock(&(connqueue->lock));
-				if(enqueue(connqueue, client_sockfd[i]) < 0){
-					printf("Connection capacity reached. Dropped new connection!\n");
-					close(client_sockfd[i]);
-					// FD_CLR(client_sockfd[i], &client_fdset);
-					// client_sockfd[i] = 0;
-				} else {
-					pthread_cond_signal(&(connqueue->cond_var));
-					client_sockfd[i] = 0;
-				}
-				pthread_mutex_unlock(&(connqueue->lock));
-			}
+			// printf("timeout\n");
+			// continue;
 		}
 
 		if(FD_ISSET(listenfd, &client_fdset))
 		{
-			printf("Ready to accept\n");
 			memset(&client_addr, 0, sizeof(client_addr));
 			len = sizeof(client_addr);
 			clientfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
@@ -679,57 +575,31 @@ int main(int argc, char *argv[])
 				perror("accept error!\n");
 				continue;
 			}
-			client_sockfd[conn_amount++] = clientfd;
-			if(clientfd > maxsock) {
-				maxsock = clientfd;
+			pthread_mutex_lock(&(connqueue->lock));
+			if(enqueue(connqueue, clientfd) < 0){
+				printf("Connection capacity reached. Dropped new connection!\n");
+				close(clientfd);
+			} else {
+				pthread_cond_signal(&(connqueue->cond_var));
 			}
+			pthread_mutex_unlock(&(connqueue->lock));
 		}
-		// printf("HERE\n");
-		// else if(handle_stdin()){
-		// 	break;
-		// }
+		if (time_to_stop)
+		{
+			break;
+		}
 	}
-
-
-// 	while(1) {
-// 		if((event_count = epoll_wait(epollfd, events, 2, -1)) < 0) {
-// 			perror("error in epoll_wait()\n");
-// 			break;
-// 		}
-// 		for(i = 0; i < event_count; i++) {
-// 			/* handle console input */
-// 			if (events[i].data.fd == STDIN_FILENO) {
-// 				if(handle_stdin()){
-// 					goto close_fds;
-// 				}
-// 			} else {
-// 				/* handle new connection */
-				// memset(&client_addr, 0, sizeof(client_addr));
-				// len = sizeof(client_addr);
-				// clientfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
-// 				pthread_mutex_lock(&(connqueue->lock));
-// 				if(enqueue(connqueue, clientfd) < 0){
-// 					printf("Connection capacity reached. Dropped new connection!\n");
-// 					close(clientfd);
-// 				} else {
-// 					pthread_cond_signal(&(connqueue->cond_var));
-// 				}
-// 				pthread_mutex_unlock(&(connqueue->lock));
-// 			}
-// 		}
-// 	}
 
 	printf("Closing socket...\n");
 	close(listenfd);
 
-	/* Clean up */
 	printf("stopping server\n");
 	for(i = 0; i < threads; i++) {
 		pthread_cancel(workers[i]);
 	}
 	freequeue(connqueue);
+	delete_logger();
 
-	/* Prints stats */
 	unsigned int total_wrote = 0;
 	unsigned int total_read = 0;
 	for(i = 0; i < threads; i++) {
@@ -739,7 +609,6 @@ int main(int argc, char *argv[])
 	}
 	printf("Total bytes received: %u Bytes\nTotal bytes sent: %u Bytes\n", total_read, total_wrote);
 
-	/* Exit */
 	return EXIT_SUCCESS;
 }
 

@@ -1,6 +1,7 @@
 # Prerequisites
 *.d
 
+big.txt
 # build files
 server
 temp/
