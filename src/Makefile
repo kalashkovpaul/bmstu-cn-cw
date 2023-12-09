@@ -1,15 +1,24 @@
 CC = gcc
-CFLAGS = -Wall -lpthread
+CFLAGS = -g -std=c99 -Wall -Werror -pedantic -Wfloat-conversion -Wvla -Wfloat-equal -Wpedantic -Wextra -Iinc -g3 -Wno-vla -Wno-unused-parameter
 
-server: server.c
-	${CC} ${CFLAGS} server.c logger.h logger.c
+server: out/main.o out/logger.o out/thread_pool.o out/server.o
+	$(CC) -o $@ $^ -lgmp
 
-debug: server.c
-	${CC} ${CFLAGS} -g server.c logger.h logger.c
+out/server.o: src/server.c inc/server.h
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+out/thread_pool.o: src/thread_pool.c inc/thread_pool.h
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+out/logger.o: src/logger.c inc/logger.h
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+out/main.o: src/main.c inc/server.h inc/thread_pool.h
+	$(CC) $(CFLAGS) -o $@ -c $<
 
 run: server
 	./server
 
 clean:
-	rm -rf server debug
+	rm out/*.o
 
