@@ -76,6 +76,7 @@ int main(int argc, char *argv[])
 				perror("accept error!\n");
 				continue;
 			}
+			// printf("Opened %d\n", clientfd);
 			pthread_mutex_lock(&(connqueue->lock));
 			if(enqueue(connqueue, clientfd) < 0)
             {

@@ -24,7 +24,7 @@
 		switch(req_status)
 		{
 			case INCOMPLETE:
-			case BADFILE:
+			case FORBIDDEN:
 			{
 				close_clientfd(clientfd, tindex, total_wrote);
 				continue;

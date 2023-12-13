@@ -191,13 +191,13 @@ int create_listen_socket(int port)
 	return fd;
 }
 
-int get_file_name(char *request, char *filename)
+int get_file_name(char *request, char *filename, char *message)
 {
 	char method[8] = {'\0'}, version[8] = {'\0'};
 	sscanf(request, "%7s %s %7s\r\n", method, filename, version);
-	char *message_to_log = calloc(FILE_BUFFER_SIZE, sizeof(char));
-	snprintf(message_to_log, FILE_BUFFER_SIZE, "%s %s %s", method, filename, version);
-	add_to_log(message_to_log);
+	if (message)
+		snprintf(message, FILE_BUFFER_SIZE, "%s %s %s", method, filename, version);
+	// add_to_log(message);
 	if (strcmp(method, "GET") == 0)
 		return 1;
 	if (strcmp(method, "HEAD") == 0)
@@ -281,7 +281,7 @@ char *get_response_header(char *filename)
 	return response_header;
 }
 
-enum http_status handle_http_request(char *request, int *htmlfd, char **response_header)
+enum http_status handle_http_request(char *request, int *htmlfd, char **response_header, char *message)
 {
 	char filename[FILE_NAME_SIZE] = {'\0'};
 	char fullpath[FILE_NAME_SIZE + html_dir_len + 4];
@@ -292,16 +292,23 @@ enum http_status handle_http_request(char *request, int *htmlfd, char **response
 	*response_header = NULL;
 
 	if (strstr(request, "\r\n\r\n") == NULL)
+	{
+		snprintf(message, FILE_BUFFER_SIZE, "Incomplete request");
 		return INCOMPLETE;
+	}
 
-	int method = get_file_name(request, filename);
+	int method = get_file_name(request, filename, message);
 	if(method == 0)
 	{
+		int len = strlen(message);
+		snprintf(message + len, FILE_BUFFER_SIZE - len, " 403 Not Allowed");
 		return NOTALLOWED;
 	}
-	if (filename[0] == '.' || filename[0] == '~' || strstr(filename, "..") != NULL)
+	if (strstr(filename, "/.") || strstr(filename, "~") || strstr(filename, "..") != NULL)
 	{
-		return BADFILE;
+		int len = strlen(message);
+		snprintf(message + len, FILE_BUFFER_SIZE - len, " Bad file");
+		return FORBIDDEN;
 	}
 
 	if(strcmp(filename, "/") == 0)
@@ -310,10 +317,14 @@ enum http_status handle_http_request(char *request, int *htmlfd, char **response
 	sprintf(fullpath, "./%s%s", html_dir, filename);
 	if ((fd = open(fullpath, O_RDONLY)) < 0)
 	{
+		int len = strlen(message);
+		snprintf(message + len, FILE_BUFFER_SIZE - len, " 404 Not Found");
 		return NOTFOUND;
 	}
 	else
 	{
+		int len = strlen(message);
+		snprintf(message + len, FILE_BUFFER_SIZE - len, " 200 OK");
 		*htmlfd = fd;
 		*response_header = get_response_header(filename);
 		return OK;
@@ -324,6 +335,7 @@ void close_clientfd(int clientfd, int index, int total)
 {
 	bytes_wrote[index] += total;
 	close(clientfd);
+	// printf("Closed %d\n", clientfd);
 }
 
 void* handle_connection(void *args)
@@ -348,22 +360,37 @@ void* handle_connection(void *args)
 
 		if(clientfd == -1)
 			continue;
+		printf("Got %d\n", clientfd);
 
+		char *message_to_log = calloc(FILE_BUFFER_SIZE, sizeof(char));
 		br = read(clientfd, req_buffer, REQUEST_BUFFER_SIZE-1);
 		if(br <= 0)
 		{
+			bw = write(clientfd, HTTP_403, HTTP_403_len);
+			if(bw > 0)
+				total_wrote += bw;
+			snprintf(message_to_log, FILE_BUFFER_SIZE, "%s, %d", strerror(errno), clientfd);
+			add_to_log(message_to_log);
 			close_clientfd(clientfd, tindex, total_wrote);
 			continue;
 		}
 		req_buffer[br] = '\0';
 		bytes_read[tindex] += br;
 
-		req_status = handle_http_request(req_buffer, &htmlfd, &response_header);
+		req_status = handle_http_request(req_buffer, &htmlfd, &response_header, message_to_log);
+		add_to_log(message_to_log);
 		switch(req_status)
 		{
 			case INCOMPLETE:
-			case BADFILE:
 			{
+				close_clientfd(clientfd, tindex, total_wrote);
+				continue;
+			}
+			case FORBIDDEN:
+			{
+				bw = write(clientfd, HTTP_403, HTTP_403_len);
+				if(bw > 0)
+					total_wrote += bw;
 				close_clientfd(clientfd, tindex, total_wrote);
 				continue;
 			}
@@ -387,7 +414,7 @@ void* handle_connection(void *args)
 			{
 				bw = write(clientfd, response_header, strlen(response_header));
 				char filename[FILE_NAME_SIZE] = {'\0'};
-				int method = get_file_name(req_buffer, filename);
+				int method = get_file_name(req_buffer, filename, NULL);
 				if(bw <= 0)
 				{
 					close_clientfd(clientfd, tindex, total_wrote);

@@ -14,6 +14,11 @@
 	"Connection: Closed\r\n"\
 	"Content-Type: "
 
+#define HTTP_403 "HTTP/1.1 403 Forbidden\r\n"\
+	"Server: Single File Server\r\n"\
+	"Content-Type: text/html; charset=utf-8\r\n"\
+	"Connection: Closed\r\n\r\nYOU DON'T HAVE ACCESS"
+
 #define HTTP_404 "HTTP/1.1 404 Not Found\r\n"\
 	"Server: Single File Server\r\n"\
 	"Content-Type: text/html; charset=utf-8\r\n"\
@@ -25,6 +30,7 @@
 	"Connection: Closed\r\n\r\nONLY GET AND HEAD ARE ACCEPTED"
 
 #define HTTP_BASE_OK_len strlen(HTTP_BASE_OK)
+#define HTTP_403_len strlen(HTTP_403)
 #define HTTP_404_len strlen(HTTP_404)
 #define HTTP_405_len strlen(HTTP_405)
 
@@ -49,6 +55,6 @@ enum http_status
 	OK,
 	INCOMPLETE,
 	NOTALLOWED,
-	BADFILE,
+	FORBIDDEN,
 	NOTFOUND
 };

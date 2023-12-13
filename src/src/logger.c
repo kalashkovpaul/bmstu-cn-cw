@@ -132,8 +132,8 @@ void log_message_to_file(char *message)
 	}
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-	printf("%s, ", message);
-	printf("%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+	// printf("%s, ", message);
+	// printf("%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	fprintf(log_file, "%s, ", message);
 	fprintf(log_file, "%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	fclose(log_file);
@@ -147,8 +147,10 @@ void* log_message(void)
         pthread_mutex_lock(&(logqueue->lock));
 		char *message = log_dequeue(logqueue);
         if (message)
+		{
             log_message_to_file(message);
-        free(message);
+        	free(message);
+		}
 		pthread_mutex_unlock(&(logqueue->lock));
     }
     return NULL;
