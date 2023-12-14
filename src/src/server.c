@@ -7,6 +7,8 @@ queue *connqueue;
 unsigned int *bytes_read = NULL;
 unsigned int *bytes_wrote = NULL;
 fd_set client_fdset;
+fd_set master;
+fd_set readable;
 int threads = DEFAULT_POOLSIZE;
 int *client_sockfd = NULL;
 int time_to_stop = 0;
@@ -22,14 +24,6 @@ queue *create_queue(int capacity)
 	if (pthread_mutex_init(&(q->lock), NULL) != 0)
 	{
 		perror("Error Initialising mutex lock\n");
-		free(q);
-		q = NULL;
-		return NULL;
-	}
-	if (pthread_cond_init(&(q->cond_var), NULL) != 0)
-	{
-		pthread_mutex_destroy(&(q->lock));
-		perror("Error Initialising conditional variable\n");
 		free(q);
 		q = NULL;
 		return NULL;
@@ -94,7 +88,6 @@ void freequeue(queue *q)
 	free(q);
 
 	pthread_mutex_destroy(&(q->lock));
-	pthread_cond_destroy(&(q->cond_var));
 	return ;
 }
 
@@ -334,6 +327,8 @@ enum http_status handle_http_request(char *request, int *htmlfd, char **response
 void close_clientfd(int clientfd, int index, int total)
 {
 	bytes_wrote[index] += total;
+	// FD_CLR(clientfd, &readable);
+	// FD_CLR(clientfd, &master);
 	close(clientfd);
 	// printf("Closed %d\n", clientfd);
 }
@@ -360,8 +355,7 @@ void* handle_connection(void *args)
 
 		if(clientfd == -1)
 			continue;
-		printf("Got %d\n", clientfd);
-
+		// printf("Queue length = %d\n", connqueue->size);
 		char *message_to_log = calloc(FILE_BUFFER_SIZE, sizeof(char));
 		br = read(clientfd, req_buffer, REQUEST_BUFFER_SIZE-1);
 		if(br <= 0)

@@ -140,7 +140,7 @@ void log_message_to_file(char *message)
 	log_file = NULL;
 }
 
-void* log_message(void)
+void* log_message(void *args)
 {
     while(1)
     {
@@ -160,7 +160,7 @@ void create_logger(void)
 {
     pthread_t *worker = calloc(1, sizeof(pthread_t));
     logqueue = create_logqueue(1000);
-    if(pthread_create(worker, NULL, (void * (*)(void *))log_message, NULL) < 0)
+    if(pthread_create(worker, NULL, log_message, NULL) < 0)
 	{
         perror("Error in pthread_create()\n");
         free(worker);

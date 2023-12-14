@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -g -std=c99 -Wall -Werror -pedantic -Wfloat-conversion -Wvla -Wfloat-equal -Wpedantic -Wextra -Iinc -g3 -Wno-vla -Wno-unused-parameter
+CFLAGS = -g -std=gnu99 -Wall -Werror -pedantic -Wfloat-conversion -Wvla -Wfloat-equal -Wpedantic -Wextra -Iinc -g3 -Wno-vla -Wno-unused-parameter
 
 server: out/main.o out/logger.o out/thread_pool.o out/server.o
-	$(CC) -o $@ $^ -lgmp
+	$(CC) -o $@ $^ -pthread
 
 out/server.o: src/server.c inc/server.h
 	$(CC) $(CFLAGS) -o $@ -c $<

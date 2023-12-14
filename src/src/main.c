@@ -25,11 +25,10 @@ int main(int argc, char *argv[])
 	}
 
 	pthread_t *workers;
-	if((workers = create_threadpool(threads, (void *)handle_connection)) == NULL)
+	if((workers = create_threadpool(threads, handle_connection)) == NULL)
     {
 		close(listenfd);
 		pthread_mutex_destroy(&(connqueue->lock));
-		pthread_cond_destroy(&(connqueue->cond_var));
 		exit(EXIT_FAILURE);
 	}
 	create_logger();
@@ -48,45 +47,57 @@ int main(int argc, char *argv[])
 	int i;
 	struct timespec tv;
 	bzero((void*)client_sockfd, sizeof(client_sockfd));
-	int ret = 0;
+	FD_ZERO(&master);
+	FD_ZERO(&client_fdset);
+	FD_SET(listenfd, &master);
+	int fd_max = listenfd;
+	tv.tv_sec = 30;
+	tv.tv_nsec = 0;
+	// int total = 0;
 	while (1)
 	{
         if (time_to_stop)
 		{
 			break;
 		}
-		FD_ZERO(&client_fdset);
-		FD_SET(listenfd, &client_fdset);
-		tv.tv_sec = 30;
-		tv.tv_nsec = 0;
+		client_fdset = master;
 
-		ret = pselect(listenfd+1, &client_fdset, NULL, NULL, &tv, NULL);
-		if(ret < 0)
-        {
-			if (time_to_stop) break;
-		}
+		int ret = pselect(fd_max+1, &client_fdset, NULL, NULL, &tv, NULL);
+		if (ret < 0)
+			continue;
 
-		if(FD_ISSET(listenfd, &client_fdset))
+		for (int i = 0; i <= fd_max; i++)
 		{
-			memset(&client_addr, 0, sizeof(client_addr));
-			len = sizeof(client_addr);
-			clientfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
-			if(clientfd < 0)
-            {
-				perror("accept error!\n");
-				continue;
+			if (FD_ISSET(i, &client_fdset))
+			{
+				if (i == listenfd)
+				{
+					memset(&client_addr, 0, sizeof(client_addr));
+					len = sizeof(client_addr);
+					clientfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
+					// printf("Total %d\n", total++);
+					if(clientfd < 0)
+					{
+						perror("accept error!\n");
+						continue;
+					}
+					FD_SET(clientfd, &master);
+					if (clientfd > fd_max)
+						fd_max = clientfd;
+				}
+				else
+				{
+					// printf("Added %d\n", i);
+					pthread_mutex_lock(&(connqueue->lock));
+					FD_CLR(i, &master);
+					if(enqueue(connqueue, i) < 0)
+					{
+						printf("Connection capacity reached. Dropped new connection!\n");
+						close(clientfd);
+					}
+					pthread_mutex_unlock(&(connqueue->lock));
+				}
 			}
-			// printf("Opened %d\n", clientfd);
-			pthread_mutex_lock(&(connqueue->lock));
-			if(enqueue(connqueue, clientfd) < 0)
-            {
-				printf("Connection capacity reached. Dropped new connection!\n");
-				close(clientfd);
-			} else
-            {
-				pthread_cond_signal(&(connqueue->cond_var));
-			}
-			pthread_mutex_unlock(&(connqueue->lock));
 		}
 	}
 

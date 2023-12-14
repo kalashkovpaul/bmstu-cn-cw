@@ -8,6 +8,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/select.h>
+#include <strings.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -19,7 +25,7 @@
 #define FILE_NAME_SIZE 64
 
 #define LISTEN_BACKLOG 32
-#define MAX_CONNECTIONS 1000
+#define MAX_CONNECTIONS 2000
 #define DEFAULT_PORT 8000
 #define DEFAULT_POOLSIZE 8
 #define DEFAULT_STATIC "html"
@@ -38,7 +44,6 @@ struct queue
 	qnode *head;
 	qnode *tail;
 	pthread_mutex_t lock;
-	pthread_cond_t cond_var;
 };
 typedef struct queue queue;
 
@@ -48,6 +53,8 @@ extern queue *connqueue;
 extern unsigned int *bytes_read;
 extern unsigned int *bytes_wrote;
 extern fd_set client_fdset;
+extern fd_set master;
+extern fd_set readable;
 extern int threads;
 extern int *client_sockfd;
 extern int time_to_stop;
